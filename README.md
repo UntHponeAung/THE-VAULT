@@ -9,7 +9,7 @@ Note: CSI indicates changes in the radio channel, this implementation does not l
 [Watch THE VAULT demo on YouTube](https://youtube.com/shorts/hcL8IggtzgA)
 
  
-##What is implemented?
+## What is implemented?
 
 - Receiver Node: LCD, one ultrasonic sensor, joystick, buzzer, saved settings and diagnostics.
 - Sender Node: two ultrasonic sensors, red LED, buzzer, BOOT-button intrusion test and serial test controls.
