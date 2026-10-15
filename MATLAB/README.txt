@@ -1,161 +1,195 @@
-THE VAULT - MATLAB CSI MOTION ANALYSIS
+THE VAULT - MATLAB CSI motion analysis
 
-WHAT IT DOES
+I use MATLAB to record the CSI measurements from the ESP32s, plot the signal
+changes and run a separate motion detector. Each connected board sends 24 CSI
+amplitudes over USB, while the two boards continue communicating through ESP-NOW.
 
-Each ESP32 sends 24 measured CSI amplitudes from its own radio receiver over USB.
-MATLAB normalizes these amplitudes, calibrates a baseline, and detects repeated
-changes independently; it does not just display the ESP32's motion flag.
+Both ESP32s already calibrate and detect motion without MATLAB. MATLAB performs
+its own calibration, so its threshold and warnings can differ from the firmware.
+It does not control the alarm or change either board's threshold.
 
-The ESP32 captures CSI; MATLAB performs the separate analysis. This does not
-measure distance or position, and the MATLAB result never commands the alarm,
-acknowledges it or satisfies the firmware's clearance requirement.
+What you need
 
-REQUIREMENTS
+Use MATLAB R2019b or newer and the four .m files in this folder. No additional
+MathWorks toolbox is required by these scripts. Both ESP32s need matching v4
+firmware and must remain powered, but only the board you want to record needs
+a USB connection to the computer. To record both detectors, connect both boards
+by USB; one USB connection does not capture the other board's amplitude stream.
 
-Use MATLAB R2019b or newer with serialport and ordinary MATLAB graphics.
-The scripts do not call Wi-Fi Toolbox, Signal Processing Toolbox, Simulink,
-Arduino Support Package or Python; both boards need the supplied v4 firmware.
+How to run it
 
-STEPS
+1. Check the two boards first.
 
-1. Upload both projects and verify their ordinary wireless connection first.
-   Complete any joystick calibration on the LCD, and keep both boards powered.
-2. Connect the board(s) you want to analyse to your computer by USB.
-   Close PlatformIO Serial Monitor and any other program using those ports.
-3. In MATLAB, set Current Folder to this MATLAB folder.
-4. Run this synthetic detector/parser check (no hardware required):
+   Upload the receiver and sender firmware, finish any joystick calibration,
+   and check that their wireless connection works. Place both boards where you
+   want them and leave them fixed. If the link keeps dropping or CSI repeatedly
+   restarts calibration, record and investigate that before collecting a
+   stationary baseline.
 
-       test_csi_motion
+2. Connect USB and close the Serial Monitor.
 
-5. List your actual USB ports:
+   Connect one or both boards to your computer. Then close PlatformIO Serial
+   Monitor and any other program using those serial ports, because MATLAB needs
+   to open them. Keep the other board powered if you are recording only one.
+
+3. Open the MATLAB folder.
+
+   Open MATLAB and set Current Folder to this repository's MATLAB folder.
+   It should contain capture_csi.m, parse_csi_line.m, csi_motion_step.m and
+   analyse_csi.m. Type the commands below in the Command Window; you do not
+   need to put your port name inside a script.
+
+4. Find the correct USB port.
 
        serialportlist("available")
 
-6. Capture one board for 120 seconds, substituting YOUR actual port:
+   Use the port belonging to the board you want to record. On a Mac it may look
+   like /dev/cu.usbserial-0001, while on Windows it may be COM3. These are
+   examples, so use the names returned on your computer. If you are unsure
+   which board is which, identify them one at a time before the recording,
+   then reconnect both and check the port names again.
+
+5. Start the recording.
+
+   For one board, replace the example port with your own:
 
        files = capture_csi("/dev/cu.usbserial-0001", 120);
 
-   Or capture both simultaneously, main port first and sender port second:
+   This records for 120 seconds, including time spent waiting for data and
+   calibrating. The function starts USB streaming automatically, so there is
+   no need to send the m command yourself.
 
-       files = capture_csi(["/dev/cu.usbserial-0001", ...
-                            "/dev/cu.usbserial-0002"], 120);
+   For both boards, supply two different ports, with the receiver first:
 
-   On Windows use names such as "COM3" and "COM4" from serialportlist.
-   Node 1 and Node 2 follow the order you supply, not automatic board identification.
+       files = capture_csi(["/dev/cu.usbserial-0001", "/dev/cu.usbserial-0002"], 120);
 
-7. Keep the room and both boards still for the first 10 seconds OF LIVE DATA.
-   Then walk across the radio path, pause, and repeat at marked positions;
-   avoid the ultrasonic boundary if you want to observe CSI warnings alone.
-8. Watch the plot title change from CALIBRATING to READY or MOTION WARNING.
-   The blue line is MATLAB's score, dashed line its threshold, dotted line
-   the ESP32 score. MATLAB smooths its score; the firmware score is instantaneous.
-   Their thresholds and calibration start times can also differ (see below).
-9. Close the plot to stop early, or allow the duration to finish.
-   Files are saved in MATLAB's Current Folder with a timestamp and node suffix.
-10. Replay one recording later:
+   Node 1 is the first port in the command and Node 2 is the second. The program
+   does not identify their roles automatically, so note which port belongs to
+   which board. Change 120 to a longer duration if needed; for a five-minute
+   stationary observation, allow extra time for calibration and settling.
+
+6. Wait for calibration to finish.
+
+   Opening USB may restart a board, so allow it to reconnect and leave the
+   surroundings still while MATLAB shows CALIBRATING. MATLAB needs at least
+   ten seconds of usable data and 80 comparisons; wait for READY rather than
+   assuming calibration has finished after exactly ten seconds.
+
+   Each board calibrates separately from MATLAB. Also, an interruption in
+   usable CSI data can restart calibration, so avoid moving or unplugging
+   boards once the recording has started.
+
+7. Observe the graph and record your movements.
+
+   The blue line is MATLAB's smoothed motion score. The dashed line is MATLAB's
+   threshold, while the dotted grey line is the connected ESP32's score.
+   Therefore, the dashed line is not the ESP32's alarm threshold.
+
+   First record a period with no intentional movement. Then walk along a marked
+   path, pause and repeat, noting when each movement starts and ends. Keep the
+   ultrasonic sensors on valid targets beyond their clearance boundary if you
+   want to examine CSI without also triggering an ultrasonic alarm.
+
+   MATLAB shows MOTION WARNING when its own detection conditions are met.
+   A firmware alarm can happen without that warning because the two detectors
+   use different rules. Keep these outcomes separate in your notes.
+
+8. Stop and keep the recording.
+
+   Let the chosen duration finish, or close the plot window to stop early.
+   The function then stops streaming, closes the serial connections and returns
+   the CSV filenames in files. Recordings are saved in MATLAB's Current Folder
+   with a timestamp and a node number, so keep them alongside your movement notes.
+
+9. Replay the saved data.
+
+   In the same MATLAB session, run:
 
        result = analyse_csi(files(1));
 
-   Or try the included unlabelled recording without either board connected:
+   If you captured both boards, use files(2) for the second one. In a later
+   session, replace the example below with the actual saved filename:
+
+       result = analyse_csi("your_recording.csv");
+
+   You can also open the included example without connecting either board:
 
        result = analyse_csi("data/example_unlabelled.csv");
 
-   To return the same table without opening a plot:
+   To return the results table without opening a plot, use:
 
        result = analyse_csi(files(1), false);
 
-   result is a table of score, threshold and motion over time. The MatlabMotion
-   column is NaN during calibration and after missing data, not evidence of
-   no movement. Scores and provisional thresholds can still appear during calibration.
+   The table includes MATLAB's score, threshold and motion result, alongside
+   the recorded firmware score and motion status. A NaN motion result means
+   the detector was not ready, rather than confirming there was no movement.
 
-THE TWO DETECTORS ARE DELIBERATELY DIFFERENT
+How the detector works
 
-The uploaded settings have been preserved:
+For each sample, MATLAB divides the 24 amplitudes by their mean and compares
+this normalized pattern with the previous sample. The mean absolute difference,
+multiplied by 100, becomes the instantaneous change score. Normalization reduces
+uniform receiver-gain changes, although it does not remove every source of noise.
 
-  Firmware (both ESP32 boards): minimum threshold 2.0, noise multiplier 2.0.
-  Its score is the instantaneous normalized shape change. One valid calibrated
-  sample above threshold can start the firmware alarm while the guard is armed.
+During calibration, the detector calculates a threshold from the average change
+and its standard deviation:
 
-  MATLAB: minimumThreshold = 10.0 and noiseMultiplier = 10.0 in csi_motion_step.m.
-  It smooths the score with score += 0.25 * (change - score), then requires
-  three consecutive samples where BOTH raw change and the smoothed score
-  exceed threshold. MATLAB is therefore substantially more conservative here.
+    threshold = max(minimumThreshold, noiseMean + noiseMultiplier * noiseStd)
 
-Both calculate threshold = max(minimumThreshold, noiseMean + multiplier * noiseStd)
-after 10 seconds and at least 80 comparisons. The learned threshold is fixed
-until a reset, new boot, or data gap requires calibration again. Raising the
-floor only matters when it exceeds the learned noise threshold; raising the
-multiplier changes the margin above the measured calibration noise.
+In csi_motion_step.m, minimumThreshold and noiseMultiplier are both 10.0.
+The minimum is only a floor, so the learned threshold can be higher. Once
+calibration finishes, the threshold stays fixed until a data gap or reset
+requires a new calibration; it does not keep learning which warnings are correct.
 
-Changing MATLAB does not change the ESP32 thresholds or alarm. Tune one setting
-at a time using labelled stationary/movement intervals; the supplied recordings
-have no movement labels and cannot establish an optimal threshold. Current
-10/10 settings produced no warnings in an independent Python arithmetic replay
-of those recordings; this is not MATLAB runtime validation or proof of accuracy.
-See ../docs/CSI_DATA_REVIEW.md for the method and complete capture inventory.
+MATLAB smooths the score using:
 
-USB CAPTURE DETAILS
+    score = score + 0.25 * (change - score)
 
-capture_csi automatically sends m to enable streaming and n when it finishes.
-Opening a USB port may reset an ESP32, so the command is retried during startup;
-this is why the ordinary firmware should be tested before starting MATLAB.
+Both the instantaneous change and the smoothed score must exceed the threshold
+for three consecutive comparisons. The motion indication is then held for two
+seconds and extended if further qualifying comparisons occur.
 
-Logging uses a fixed 512-byte record and a UART transmit buffer allocated once
-at startup. The firmware skips records when busy; dropped counts and sequence
-numbers expose gaps instead of delaying the alarm or fabricating measurements.
+The supplied ESP32 firmware uses a minimum of 2.0 and multiplier of 2.0 instead,
+and one processed above-threshold sample can trigger its alarm after calibration
+while the guard is armed. As a result, MATLAB applies stricter detection rules,
+but whether either detector performs well still depends on the recorded data.
 
-The CSV contains: CSI1 marker, boot ID, record sequence, device milliseconds,
-firmware state, firmware score, threshold, dropped-record count, and 24 amplitudes.
-The selected LLTF bin order is 4,6,...,26 then 38,40,...,60 (zero-based); these are
-unnormalized magnitudes sqrt(real^2 + imaginary^2), not complete complex CSI.
+To adjust MATLAB, change minimumThreshold or noiseMultiplier in csi_motion_step.m
+and replay the same labelled recording. Change one value at a time so you can
+compare its effect. This does not change the C++ firmware or its alarm settings.
 
-Firmware states in this stream: 2=CALIBRATING, 3=READY, 4=MOTION.
-No usable data means no amplitude row; the live display marks the detector
-unavailable after a 350 ms gap and requires a new calibration on recovery.
+What each file does
 
-FUNCTIONS TO READ
+capture_csi.m opens the USB ports, saves valid records and plots live results.
+parse_csi_line.m checks incoming lines and rejects malformed records.
+csi_motion_step.m performs normalization, calibration and motion detection.
+analyse_csi.m runs the detector over a saved recording and returns the results.
 
-capture_csi.m opens one/two USB ports, saves validated records and plots live scores.
-parse_csi_line.m rejects ordinary console output, malformed rows and impossible values.
-csi_motion_step.m contains the independent normalization/calibration/motion detector.
-analyse_csi.m replays a saved CSV and returns the analysis table.
-test_csi_motion.m supplies synthetic data to check the detector and parser.
+If something does not look right
 
-RELIABLE EXPERIMENTS
+If MATLAB cannot find capture_csi, check Current Folder and confirm that all
+four files are present. If it cannot open a port, check the selected port name
+and close any Serial Monitor or earlier capture still using that connection.
 
-Record stationary and walking sessions separately, with the boards fixed and
-people/fans documented. Use known movement intervals to count warnings inside
-and outside them; a stronger graph alone is not proof of accuracy or range.
+If the graph stays at CALIBRATING or returns to it, check that both boards remain
+powered and the wireless link is stable. A gap of 350 ms or more requires MATLAB
+to recalibrate, and NO CSI DATA means measurements are unavailable, not that
+there is no movement. Keep still again when usable data returns.
 
-The MATLAB analysis calibrates when capture begins, which may be later than the
-firmware's calibration. Keep still again after a dropped-data period or board
-reset; USB samples are rounded to three decimals, so near-threshold scores may differ.
+The CSV includes the boot ID, sequence, device time, firmware state, score,
+threshold, skipped USB-record count and 24 amplitudes. Skipped records show that
+some measurements were not logged; live capture and replay also reject duplicate
+or out-of-order records rather than treating them as new samples.
 
-Live capture and offline replay discard duplicate or reordered sequence numbers
-within the current boot, while accepting uint32 sequence wrap. Offline replay
-uses device timestamps; across a new boot it inserts a labelled
-0.35-second separation because the actual power-off duration is unknown.
-The two boards' plots do not provide synchronized phase or location estimates.
+Use the recorded firmware_threshold column if you need the ESP32's threshold
+from that capture. Its value is provisional while the firmware state is 2
+(calibrating); states 3 and 4 mean ready and motion respectively.
 
-VALIDATION STATUS
+CSI indicates changes in the radio path, so these plots do not give a person's
+position or a guaranteed sensing radius. Keep the setup and movement times in
+your notes, since a large peak alone does not establish what caused it. The
+included example has no movement labels, so it is useful for trying replay,
+but cannot establish detection accuracy.
 
-The five revised MATLAB files passed MISS_HIT syntax/lint checks in MATLAB 2019b
-language mode during the 15 October 2026 review. Neither MATLAB nor Octave was
-available in the review environment: test_csi_motion, serial connection and
-graphics have not been executed here. Run test_csi_motion on your PC first.
-
-The uploaded synthetic test expected a hardcoded floor of 2.5 despite the
-detector's current floor of 10.0. It now reads the detector's initial floor,
-checks that zero-noise calibration preserves it, and covers empty CSV fields,
-out-of-range dropped counts, and duplicate/reordered/wrapped replay sequences.
-Supplied CSV records show that data was captured previously; they do not verify
-these revised scripts on hardware or label when physical movement occurred.
-
-API REFERENCES
-
-MathWorks serialport:
-https://www.mathworks.com/help/matlab/ref/serialport.html
-MathWorks serial read:
-https://www.mathworks.com/help/matlab/ref/serialport.read.html
-Espressif ESP32 CSI / Wi-Fi guide for the pinned framework generation:
-https://docs.espressif.com/projects/esp-idf/en/v4.4.7/esp32/api-guides/wifi.html#wi-fi-channel-state-information
+The scripts passed static syntax checks during the code review. MATLAB itself
+was not available there, so that review did not verify live capture or plots.
