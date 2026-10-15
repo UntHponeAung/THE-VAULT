@@ -4,6 +4,14 @@
 Inspired by a jewel heist in *Lupin*, THE VAULT protects an animated diamond on an LCD. Two ESP32s exchange sensor and alarm information over ESP-NOW. Three ultrasonic sensors detect nearby objects and two radios independently detect changes in Wi-Fi Channel State Information (CSI). Any intrusion would start the sirens and retracts a virtual diamond into an animated vault shown on an ILI9488 3.5" TFT LCD Display.
 
 Note: CSI indicates changes in the radio channel, this implementation does not locate a person, guarantee room coverage, or enforce a sensing radius.
+
+# DEMO
+
+## Demo
+[Watch THE VAULT demo on YouTube](https://youtube.com/shorts/hcL8IggtzgA)
+
+
+
  
 ##What is implemented?
 
