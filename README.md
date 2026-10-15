@@ -67,4 +67,4 @@ Hold the sender BOOT button **after startup** to report a test intrusion from bo
 
 Broadcast communication is unencrypted and unauthenticated. When CSI is unavailable, acknowledged recovery can use confirmed ultrasonic clearance, so it does not require fresh, calibrated CSI from both nodes. A missing remote link  seals the vault silently and requires acknowledgment plus restored valid clearance.
 
-The reviewed package is ready for a private repository and hardware validation. No public release, hardware qualification, license choice or claim of measured latency is implied. Source review fixes and the remaining release steps are recorded in [Review](docs/REVIEW.md).
+
