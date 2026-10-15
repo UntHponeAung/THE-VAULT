@@ -1,6 +1,6 @@
 # Architecture
 
-The receiver owns the security decision. The sender measures two distances, performs its own CSI detection, sends their status and mirrors the receiver's siren/LED instructions. MATLAB observes selected CSI amplitudes over USB and independently evaluates motion.
+In this system, the receiver makes all the security decision. The sender measures two distances, performs its own CSI detection, sends their status and mirrors the receiver's siren/LED instructions. MATLAB observes selected CSI amplitudes over USB and independently evaluates motion.
 
 ```mermaid
 flowchart TD
@@ -17,7 +17,7 @@ flowchart TD
 
 ## Execution and concurrency
 
-Each board has one application `setup()` and a cooperative `loop()`. Arduino/ESP-IDF runs framework tasks underneath. GPIO interrupts capture ultrasonic pulse edges; Wi-Fi callbacks copy incoming packets and CSI into protected buffers. The application loop performs filtering, decisions, sound scheduling and drawing. No additional application worker task is created.
+Each board has one application `setup()` and a cooperative `loop()`. Arduino/ESP-IDF runs framework tasks underneath. GPIO interrupts capture ultrasonic pulse edges, Wi-Fi callbacks copy incoming packets and CSI into protected buffers. The application loop performs filtering, decisions, sound scheduling and drawing. No additional application worker task is created.
 
 The radio queue holds eight packets and drops the oldest on overflow. Receiver overflow resets remote confirmation; sender overflow makes receiver status untrusted until a valid newer reply. CSI uses one pending frame, so a newer frame can replace an unprocessed one. A single **processed, usable, calibrated** CSI sample can trigger an alarm; arbitrary physical spikes are not guaranteed to be captured.
 
