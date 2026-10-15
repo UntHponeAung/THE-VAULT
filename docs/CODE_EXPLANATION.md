@@ -1,4 +1,4 @@
-# THE VAULT — Code explanation
+# THE VAULT  (Code explained)
 
 THE VAULT uses two ESP32s to combine ultrasonic proximity sensing with experimental Wi-Fi CSI motion detection. The receiver controls the LCD, local ultrasonic sensor, joystick and buzzer, while the sender handles two ultrasonic sensors, a red LED and a second buzzer. Both boards run CSI detection; however, the receiver owns the shared alarm state, so the sender reports measurements and follows its instructions.
 
