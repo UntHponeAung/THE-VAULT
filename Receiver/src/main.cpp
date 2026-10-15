@@ -3,7 +3,6 @@
 // After acknowledgement, all three sensors must clear and active CSI warnings end.
 // CSI unavailability permits ultrasonic-only recovery; see docs/REVIEW.md.
 // Use the matching v4 sender: ESP-NOW broadcasts are unencrypted on channel 1.
-// The vault is only an animation. Saved settings retain the pixel-pals namespace.
 
 #include "firmware.h"
 #include <Preferences.h>
