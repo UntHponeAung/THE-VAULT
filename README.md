@@ -26,7 +26,6 @@ Note: CSI indicates changes in the radio channel, this implementation does not l
 | Wire the boards                         | [Hardware and controls](docs/HARDWARE.md)                |
 | Understand the program                  | [Learning and code review guide](docs/LEARNING_GUIDE.md) |
 | Understand the state machines and radio | [Architecture](docs/ARCHITECTURE.md)                     |
-| See fixes and unresolved limitations    | [Review](docs/REVIEW.md)                                 |
 | See what was actually tested            | [Validation](docs/VALIDATION.md)                         |
 | Keep source formatting consistent       | [Source style](docs/STYLE.md)                            |
 | Connect MATLAB                          | [MATLAB](MATLAB/README.txt)                 |
