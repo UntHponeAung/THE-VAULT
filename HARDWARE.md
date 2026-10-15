@@ -1,6 +1,7 @@
 # Hardware and controls
 
-Use two classic ESP32 development boards matching the `esp32dev` configuration. The assignments below are GPIO numbers; labels vary by board. On the commonly used ESP32-WROOM boards, RX2 is GPIO16 and TX2 is GPIO17. HC-SR04 uses trigger/echo pulses, not a UART connection.
+Use two classic ESP32 development boards matching the `esp32dev` configuration. The assignments below are GPIO numbers; labels vary by board. 
+Note: On the commonly used ESP32-WROOM boards, RX2 is GPIO16 and TX2 is GPIO17. HC-SR04 uses trigger/echo pulses and not a UART connection.
 
 ## Receiver
 
@@ -33,9 +34,9 @@ Each HC-SR04 needs a 5 V supply and a common ground with its ESP32. Give **each 
 
 ## Controls and test modes
 
-Receiver joystick: short press acknowledges a latched alarm; otherwise it toggles diagnostics. Hold one second to open settings. Alarm acknowledgment takes priority over settings. Up/down selects distance, sound, X reversal or Y reversal; left/right changes the selection. Press saves and exits. Holding at startup runs joystick calibration before security monitoring starts.
+Receiver joystick: short press acknowledges a latched alarm, otherwise it toggles diagnostics. Hold one second to open settings.  Up/down selects distance, sound, X reversal or Y reversal; left/right changes the selection. Press saves and exits. Holding at startup runs joystick calibration before security monitoring starts.
 
-The sender's BOOT button overrides both reported sensors with valid 5 cm test readings while held after boot. Release restores hardware or the selected mock mode. The ultrasonic confirmation timer still applies; this is not a direct siren command.
+The sender's BOOT button overrides both reported sensors with valid 5 cm test readings while held after boot. Release restores hardware or the selected mock mode. The ultrasonic confirmation timer still applies but this is not a direct siren command.
 
 | Sender serial command | Result |
 |---|---|
