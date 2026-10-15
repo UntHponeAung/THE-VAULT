@@ -5,12 +5,8 @@ Inspired by a jewel heist in *Lupin*, THE VAULT protects an animated diamond on 
 
 Note: CSI indicates changes in the radio channel, this implementation does not locate a person, guarantee room coverage, or enforce a sensing radius.
 
-# DEMO
-
 ## Demo
 [Watch THE VAULT demo on YouTube](https://youtube.com/shorts/hcL8IggtzgA)
-
-
 
  
 ##What is implemented?
