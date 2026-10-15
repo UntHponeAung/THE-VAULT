@@ -1,6 +1,6 @@
 # Architecture
 
-In this system, the receiver makes all the security decision. The sender measures two distances, performs its own CSI detection, sends their status and mirrors the receiver's siren/LED instructions. MATLAB observes selected CSI amplitudes over USB and independently evaluates motion.
+In THE VAULT, the receiver makes all the security decisions. Meanwhile, the sender measures two distances, runs its own CSI motion detection and sends this information to the receiver. It also follows the receiver’s instructions for its buzzer and LED, so both nodes respond to the same alarm state. Alongside this, MATLAB receives selected CSI amplitudes over USB and independently checks for motion.
 
 ```mermaid
 flowchart TD
@@ -17,15 +17,19 @@ flowchart TD
 
 ## Execution and concurrency
 
-Each board has one application `setup()` and a cooperative `loop()`. Arduino/ESP-IDF runs framework tasks underneath. GPIO interrupts capture ultrasonic pulse edges, Wi-Fi callbacks copy incoming packets and CSI into protected buffers. The application loop performs filtering, decisions, sound scheduling and drawing. No additional application worker task is created.
+Each ESP32 has a `setup()` function that runs once and a `loop()` that keeps repeating. Within this loop, the program takes turns filtering readings, making decisions, updating sound and drawing the display. However, Arduino and ESP-IDF also run background tasks, so the main loop is not the only code running on the board.
 
-The radio queue holds eight packets and drops the oldest on overflow. Receiver overflow resets remote confirmation; sender overflow makes receiver status untrusted until a valid newer reply. CSI uses one pending frame, so a newer frame can replace an unprocessed one. A single **processed, usable, calibrated** CSI sample can trigger an alarm; arbitrary physical spikes are not guaranteed to be captured.
+While the loop is running, GPIO interrupts capture the ultrasonic echo edges, and Wi-Fi callbacks copy incoming packets and CSI data into protected buffers. The loop then processes this information when it reaches the relevant functions. This allows the system to handle incoming data without creating additional application worker tasks.
 
-Locks protect shared state while copying it. They do not cover drawing, serial printing or signal-processing calculations. After consuming callback data, clock snapshots are refreshed so unsigned age calculations do not compare a new sample against an older loop timestamp. Unsigned subtraction still supports normal 32-bit clock wrap.
+The radio queue can hold eight packets. If it fills up, the oldest packet is dropped. On the receiver, this resets remote sensor confirmation; on the sender, it means the receiver’s status is no longer trusted until a valid newer reply arrives. CSI has only one pending frame, so a newer frame can overwrite one that has not yet been processed. As a result, a single usable CSI sample can trigger the alarm after calibration, but this does not mean every brief physical movement will be captured.
 
-Normal animation has no blocking loop. There are deliberate startup calibration waits, a fatal display-allocation wait, a 10 µs ultrasonic trigger pulse, a 1 ms loop yield and potentially blocking library I/O. Measure total loop time before claiming a hard real-time bound.
+Locks protect shared data while it is being copied. However, drawing, serial printing and signal-processing calculations happen outside these locks. The program also refreshes its clock readings after handling callback data, so a newly received sample is not compared against an older loop timestamp. Unsigned subtraction handles normal 32-bit clock wraparound.
 
-## Guard and vault are separate state machines
+The animations use elapsed time instead of blocking animation loops. However, startup calibration includes waits, and the program stops if the display buffer cannot be allocated. There is also a 10 µs ultrasonic trigger pulse, a 1 ms loop yield and library I/O that may take time. Therefore, the actual loop duration would need to be measured before claiming a guaranteed response time.
+
+## Guard and vault state machines
+
+The guard controller decides whether the system is armed, alarmed or waiting for clearance. Meanwhile, a separate state machine controls the diamond and shutters.
 
 ```mermaid
 stateDiagram-v2
@@ -37,30 +41,44 @@ stateDiagram-v2
     WaitingForClear --> Armed: Valid clearance and no active CSI warning
 ```
 
-Ultrasonic intrusion needs 140 ms of confirming samples. Recovery requires each sensor's valid readings at least 5 cm beyond the shared boundary and 600 ms confirmation. The boundary defaults to 30 cm and is adjustable from 10–100 cm in 5 cm steps. Invalid echoes cannot confirm clearance. Sample counters prevent repeated packets from creating new sensor evidence; sample age plus receiver queue time must remain below 350 ms.
+After startup, the system allows a 1,200 ms arming grace period. Once armed, ultrasonic intrusion requires 140 ms of confirming samples. The shared alarm distance defaults to 30 cm, although it can be adjusted from 10–100 cm in 5 cm steps.
 
-Radio-derived measurement timestamps estimate when a remote measurement occurred by subtracting its reported age from arrival time. They do not remove unknown one-way radio latency or synchronize the two board clocks.
+Pressing the joystick button acknowledges the alarm and stops the siren, but it does not immediately reopen the vault. Before that can happen, all three ultrasonic sensors must provide valid readings at least 5 cm beyond the alarm boundary, with 600 ms of confirmation. Invalid or missing echoes cannot count as clearance.
 
-The vault goes from Displaying → Retracting → Sealing → Sealed, then Opening → Raising → Displaying. Diamond travel takes 420 ms, shutters 260 ms, and a completed seal is shown for at least 120 ms before reopening. Early acknowledgment cannot stop sealing. A new intrusion during reopening reverses motion from the current position. Drawing suppresses the diamond whenever any shutter closure remains.
+To prevent repeated packets from being treated as new measurements, each sensor has a sample counter. Additionally, the reported sample age and time spent waiting in the receiver’s queue must add up to less than 350 ms. The receiver estimates when a remote measurement happened by subtracting its reported age from its arrival time. However, this does not synchronize the board clocks or account for unknown radio transmission time.
 
-Settings do not suspend sensing. An intrusion returns to the alarm scene; settings can pause reopening. A missing remote heartbeat while armed silently seals the vault. A confirmed intrusion can escalate this silent fault into an audible alarm.
+The vault animation moves through Displaying → Retracting → Sealing → Sealed, then Opening → Raising → Displaying. Diamond movement takes 420 ms, while shutter movement takes 260 ms. Once fully sealed, the vault stays that way for at least 120 ms before reopening can begin.
 
-**CSI fallback policy:** recovery is blocked by an active CSI warning, but unavailable, disabled or calibrating CSI is not affirmative proof of quiet. The current application permits ultrasonic-only recovery in those states. This policy is preserved and explicitly documented, not silently strengthened by the review.
+Because the animation is separate from acknowledgment, pressing the button early cannot interrupt sealing. Similarly, if a new intrusion happens during reopening, the animation reverses from its current position. The diamond is not drawn whenever the shutters remain even partly closed.
 
-## ESP-NOW protocol
+Opening settings does not stop monitoring, and an intrusion brings the alarm scene back into view. However, settings can pause reopening. If the remote heartbeat disappears while the system is armed, the vault seals silently; a confirmed intrusion can then turn this silent fault into an audible alarm.
 
-Both nodes use station mode and ESP-NOW broadcast on channel 1. No router is required. CSI setup selects an 802.11n rate and collects a 128-byte LLTF field. The application uses 24 selected subcarrier amplitudes.
+For CSI, an active motion warning prevents recovery. However, if CSI is unavailable, disabled or still calibrating, the current code allows recovery using ultrasonic clearance alone. This means that having no CSI warning is not always the same as having confirmed that the wireless environment is quiet.
 
-`WirelessPacket` is 68 bytes, protocol version 4. Each header contains the same layout and a compile-time size check. Identifiers and validation reject unrelated formats; the first accepted peer MAC is remembered for the boot. Boot sessions distinguish restarts; packet, sensor and status sequence numbers reject duplicate or reordered evidence. A transport send callback means a send attempt finished, not that the other application acted on it. Application ACKs echo the sender sample sequence and carry authoritative receiver status.
+## ESP-NOW communication
 
-The sender transmits about every 70 ms. Its ultrasonic pings alternate every 70 ms, so each remote sensor updates about every 140 ms. Receiver status is periodic and also sent for state changes. The remote buzzer reconstructs the receiver's siren phase from elapsed time; it retains an already latched alarm if contact is lost.
+Both boards use Wi-Fi station mode and communicate through ESP-NOW broadcast on channel 1, so no router is required. For CSI sensing, the setup selects an 802.11n rate and collects a 128-byte LLTF field, from which the application uses 24 selected subcarrier amplitudes.
 
-The broadcast protocol has no encryption or cryptographic authentication. Magic, network ID, MAC, session and sequence checks do not prevent a capable attacker from constructing packets. This release preserves the existing bench-demo protocol.
+The `WirelessPacket` structure is 68 bytes and uses protocol version 4. Both boards define the same layout, and a compile-time check verifies its size. Packet identifiers and validation help reject unrelated message formats, while the first accepted peer MAC address is remembered for that boot.
+
+Boot sessions distinguish restarts. Meanwhile, packet, sensor and status sequence numbers help reject duplicate or out-of-order information. These checks prevent old evidence from being treated as a new reading.
+
+When a transmission finishes, the send callback only confirms that the send attempt has completed. It does not prove the other program processed the message. For that reason, the receiver sends an application acknowledgment, or ACK, which echoes the sender’s sample sequence and includes the receiver’s current status.
+
+The sender transmits approximately every 70 ms. Its ultrasonic sensors also take turns pinging every 70 ms, so each individual sensor updates approximately every 140 ms. Receiver status is sent periodically and when the state changes. Using the reported elapsed time, the sender reconstructs the siren phase so its buzzer follows the receiver’s alarm. If communication is lost during an already latched alarm, the sender keeps that alarm active.
+
+The current broadcast protocol has no encryption or cryptographic authentication. Although the identifiers, MAC address, sessions and sequence numbers filter messages, they do not stop someone capable of constructing matching packets. This communication method remains suitable for the current demonstration rather than a secure deployment.
 
 ## CSI processing
 
-For each chosen bin, magnitude is `sqrt(real² + imaginary²)`. Divide each magnitude by the mean of all 24 to reduce uniform receiver-gain changes. The instantaneous score is the mean absolute difference between consecutive normalized vectors, multiplied by 100. Ten seconds and at least 80 comparisons establish a baseline; threshold = max(minimum, baseline mean + multiplier × baseline standard deviation).
+For each selected subcarrier, the program calculates the magnitude using `sqrt(real² + imaginary²)`. It then divides each magnitude by the mean of all 24 amplitudes, which reduces the effect of uniform receiver-gain changes.
 
-Both firmware detectors use minimum 2 and multiplier 2, trigger on one strictly above-threshold score, and hold motion for two seconds for reporting. Stale CSI resets calibration. MATLAB intentionally uses minimum 10 and multiplier 10, smooths the score with weight 0.25 and requires three consecutive qualifying changes. Its result is independent analysis, not an alarm command.
+Next, it compares this normalized pattern with the previous one. The mean absolute difference, multiplied by 100, becomes the instantaneous motion score. During calibration, at least ten seconds and 80 comparisons are used to learn the baseline. The threshold is then calculated as:
 
-Primary API reference: [Espressif ESP-NOW documentation for ESP-IDF 4.4.7](https://docs.espressif.com/projects/esp-idf/en/v4.4.7/esp32/api-reference/network/esp_now.html). The architecture above describes this repository's implementation rather than a guarantee made by the wireless API.
+`threshold = max(minimum, baseline mean + multiplier × baseline standard deviation)`
+
+Both firmware detectors use a minimum of 2 and a multiplier of 2. After calibration, one processed score strictly above the threshold can trigger the alarm. The motion indication is then held for two seconds so it can be reported, while stale CSI data resets calibration.
+
+MATLAB runs a separate detector using a minimum of 10 and a multiplier of 10. It also smooths the score with a weight of 0.25 and requires three consecutive qualifying changes. Therefore, its results can differ from the firmware’s results. MATLAB is used for independent observation and analysis; it does not send alarm or clearance commands to either board.
+
+API reference: [Espressif ESP-NOW documentation for ESP-IDF 4.4.7](https://docs.espressif.com/projects/esp-idf/en/v4.4.7/esp32/api-reference/network/esp_now.html). The behaviour described here comes from this project’s implementation, rather than being guaranteed by ESP-NOW itself.
